@@ -1,0 +1,97 @@
+{
+  "$id": "hlv-annotation-output",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "HLV Annotation Output Data",
+  "description": "Annotation of a single input data",
+  "required": ["inputId", "timestamp", "annotatorId", "areasOfLawAnnotation", "preferredHLVAnnotation"],
+  "examples": [
+    {
+      "inputId": 0,
+      "timestamp": "2024-11-13T20:20:39+00:00",
+      "annotatorId": 0,
+      "areasOfLawAnnotation": {"elapsedTime": 5500, "selectedAreas": ["Charities Law", "Consumer law"]},
+      "preferredHLVAnnotation": {
+        "elapsedTime": 2450,
+        "isOptionAPreferred": true,
+        "isOptionBPreferred": false,
+        "confidence": 0.87
+      }
+    },
+    {
+      "inputId": 0,
+      "timestamp": "2024-11-14T20:20:39+00:00",
+      "annotatorId": 1,
+      "areasOfLawAnnotation": {"selectedAreas": ["IT"]},
+      "preferredHLVAnnotation": {
+        "elapsedTime": 78559,
+        "isOptionAPreferred": true,
+        "isOptionBPreferred": true,
+        "confidence": 0.76
+      }
+    }
+  ],
+  "type": "object",
+  "properties": {
+    "inputId": {
+      "description": "Identifier of the annotated input data",
+      "type": "integer",
+      "minimum": 0
+    },
+    "timestamp": {
+      "description": "Date and time of the annotation",
+      "type": "string",
+      "format": "date-time"
+    },
+    "annotatorId": {
+      "description": "Unique identifier of the annotator",
+      "type": "integer",
+      "minimum": 0
+    },
+    "areasOfLawAnnotation": {
+      "description": "Annotation of the input text",
+      "type": "object",
+      "properties": {
+        "elapsedTime": {
+          "description": "Number of miliseconds the annotator spent to complete the annotation",
+          "type": "integer",
+          "minimum": 0
+        },
+        "selectedAreas": {
+          "description": "Areas of law selected by the annotator",
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "$ref": "file:aol.json"
+          }
+        }
+      }
+    },
+    "preferredHLVAnnotation": {
+      "description": "Annotation of HLV preference",
+      "required": ["isOptionAPreferred", "isOptionBPreferred", "confidence"],
+      "type": "object",
+      "properties": {
+        "elapsedTime": {
+          "description": "Number of miliseconds the annotator spent to complete the annotation",
+          "type": "integer",
+          "minimum": 0
+        },
+        "isOptionAPreferred": {
+          "description": "Whether option A was preferred by the annotator",
+          "type": "boolean"
+        },
+        "isOptionBPreferred": {
+          "description": "Whether option B was preferred by the annotator",
+          "type": "boolean"
+        },
+        "confidence": {
+          "description": "Confidence level of the annotator about their preference",
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        }
+      }
+    }
+  }
+}
