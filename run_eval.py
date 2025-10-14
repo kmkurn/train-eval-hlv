@@ -14,7 +14,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import json
 import os
+from collections import Counter, defaultdict
 from pathlib import Path
 
 import numpy as np
@@ -43,10 +45,49 @@ if "SACRED_MONGO_URL" in os.environ:
 
 @ex.config
 def default():
-    # directory where hlv.npy and label.dict are stored
+    # directory where hlv.npy, label.dict, and inputs.jsonl are stored
     artifacts_dir = "artifacts"
+    # test file (if true HLV isn't saved in hlv.npy)
+    test_file = ""
     # whether the task is multilabel classification
     multilabel = False
+
+
+def _compute_true_hlv(
+    test_file: Path, inputs_file: Path, label_dict: Dictionary
+) -> np.ndarray:
+    input2counter: defaultdict[str | tuple[str, str], Counter[str]] = defaultdict(
+        Counter
+    )
+    with test_file.open(encoding="utf8") as f:
+        for line in f:
+            obj = json.loads(line)
+            inp = obj["input"]
+            try:
+                text = inp["premise"]
+            except KeyError:
+                input2counter[inp["text"]][str(obj["output"]["class"])] += 1
+            else:
+                input2counter[text, inp["hypothesis"]][obj["output"]["verdict"]] += 1
+
+    true_hlv = []
+    with inputs_file.open(encoding="utf8") as f:
+        for line in f:
+            obj = json.loads(line)
+            try:
+                text = obj["premise"]
+            except KeyError:
+                cntr = input2counter[obj["text"]]
+            else:
+                cntr = input2counter[text, obj["hypothesis"]]
+            total = sum(cntr.values())
+            true_hlv.append(
+                [
+                    cntr[label_dict.get_item_for_index(idx)] / total
+                    for idx in range(len(label_dict))
+                ]
+            )
+    return np.array(true_hlv)
 
 
 @ex.capture
@@ -58,19 +99,30 @@ def _record_metric(name, value, fmt="%.3f", _run=None, _log=None):
 
 
 @ex.automain
-def evaluate(artifacts_dir, multilabel=False, _run=None, _log=None):
+def evaluate(artifacts_dir, test_file=None, multilabel=False, _run=None, _log=None):
     artifacts_dir = Path(artifacts_dir)
     label_dict = Dictionary.load_from_file(artifacts_dir / "label.dict")
 
-    y_true, y_pred = np.load(artifacts_dir / "hlv.npy")
-    if multilabel:
-        overall_metrics = [hard_micro_f1, soft_micro_f1]
-        metric_names = "hard_micro_f1 soft_micro_f1".split()
+    y_pred = np.load(artifacts_dir / "hlv.npy")
+    if test_file:
+        y_true = _compute_true_hlv(
+            Path(test_file), artifacts_dir / "inputs.jsonl", label_dict
+        )
     else:
-        overall_metrics = [hard_acc, soft_acc]
-        metric_names = "hard_acc soft_acc".split()
-    overall_metrics.extend([poJSD, ent_corr])
-    metric_names.extend(["poJSD", "ent_corr"])
+        y_true, y_pred = y_pred
+
+    if multilabel:
+        overall_metrics = [
+            hard_micro_f1,
+            soft_micro_f1,
+            lambda x, y: poJSD(x, y, multilabel=True),
+        ]
+        metric_names = "hard_micro_f1 soft_micro_f1 poJSD".split()
+    else:
+        overall_metrics = [hard_acc, soft_acc, poJSD]
+        metric_names = "hard_acc soft_acc poJSD".split()
+    overall_metrics.append(ent_corr)
+    metric_names.append("ent_corr")
     for name, fn in zip(metric_names, overall_metrics):
         _record_metric(name, fn(y_true, y_pred), _run=_run)
     prfs = hard_prfs(y_true, y_pred)

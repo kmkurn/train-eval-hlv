@@ -24,7 +24,7 @@ from flair.data import Dictionary
 
 
 @pytest.mark.parametrize("start_id", [0, 10])
-def test_correct(tmp_path, start_id):
+def test_method_vs_true(tmp_path, start_id):
     true_hlv = np.array([[0.3, 0.4, 0.1], [0.1, 0.2, 0.9]])
     with (tmp_path / "method2hlv.npy").open("wb") as f:
         pickle.dump(
@@ -123,7 +123,142 @@ def test_correct(tmp_path, start_id):
     )
 
 
-def test_shuffle(tmp_path):
+@pytest.mark.parametrize("start_id", [0, 10])
+def test_method_vs_method(tmp_path, start_id):
+    true_hlv = np.array([[0.3, 0.4, 0.1], [0.1, 0.2, 0.9]])
+    with (tmp_path / "method2hlv.npy").open("wb") as f:
+        pickle.dump(
+            {
+                "a": np.stack(
+                    [true_hlv, np.array([[0.1, 0.9, 0.8], [0.2, 0.9, 0.7]])], axis=0
+                ),
+                "b": np.stack(
+                    [true_hlv, np.array([[0.9, 0.7, 0.8], [0.1, 0.9, 0.2]])], axis=0
+                ),
+                "c": np.stack(
+                    [true_hlv, np.array([[0.2, 0.3, 0.6], [0.9, 0.8, 0.1]])], axis=0
+                ),
+            },
+            file=f,
+        )
+    label_dict = Dictionary(add_unk=False)
+    for l in "UVT":
+        label_dict.add_item(l)
+    label_dict.save(tmp_path / "label.dict")
+    with (tmp_path / "inputs.jsonl").open("w", encoding="utf8") as f:
+        print(json.dumps({"text": "foo bar"}), file=f)
+        print(json.dumps({"text": "baz quux"}), file=f)
+
+    main(
+        tmp_path / "method2hlv.npy",
+        tmp_path / "inputs.jsonl",
+        tmp_path / "label.dict",
+        tmp_path / "hlv-annotation",
+        thresh=0.1,
+        start_id=start_id,
+        vs="method",
+    )
+
+    expected = [
+        {
+            "id": start_id,
+            "text": "foo bar",
+            "optionA": [
+                {"areaOfLaw": "V", "confidence": 0.9},
+                {"areaOfLaw": "T", "confidence": 0.8},
+            ],
+            "optionB": [
+                {"areaOfLaw": "U", "confidence": 0.9},
+                {"areaOfLaw": "T", "confidence": 0.8},
+                {"areaOfLaw": "V", "confidence": 0.7},
+            ],
+        },
+        {
+            "id": start_id + 1,
+            "text": "baz quux",
+            "optionA": [
+                {"areaOfLaw": "V", "confidence": 0.9},
+                {"areaOfLaw": "T", "confidence": 0.7},
+                {"areaOfLaw": "U", "confidence": 0.2},
+            ],
+            "optionB": [
+                {"areaOfLaw": "V", "confidence": 0.9},
+                {"areaOfLaw": "T", "confidence": 0.2},
+            ],
+        },
+        {
+            "id": start_id + 2,
+            "text": "foo bar",
+            "optionA": [
+                {"areaOfLaw": "V", "confidence": 0.9},
+                {"areaOfLaw": "T", "confidence": 0.8},
+            ],
+            "optionB": [
+                {"areaOfLaw": "T", "confidence": 0.6},
+                {"areaOfLaw": "V", "confidence": 0.3},
+                {"areaOfLaw": "U", "confidence": 0.2},
+            ],
+        },
+        {
+            "id": start_id + 3,
+            "text": "baz quux",
+            "optionA": [
+                {"areaOfLaw": "V", "confidence": 0.9},
+                {"areaOfLaw": "T", "confidence": 0.7},
+                {"areaOfLaw": "U", "confidence": 0.2},
+            ],
+            "optionB": [
+                {"areaOfLaw": "U", "confidence": 0.9},
+                {"areaOfLaw": "V", "confidence": 0.8},
+            ],
+        },
+        {
+            "id": start_id + 4,
+            "text": "foo bar",
+            "optionA": [
+                {"areaOfLaw": "U", "confidence": 0.9},
+                {"areaOfLaw": "T", "confidence": 0.8},
+                {"areaOfLaw": "V", "confidence": 0.7},
+            ],
+            "optionB": [
+                {"areaOfLaw": "T", "confidence": 0.6},
+                {"areaOfLaw": "V", "confidence": 0.3},
+                {"areaOfLaw": "U", "confidence": 0.2},
+            ],
+        },
+        {
+            "id": start_id + 5,
+            "text": "baz quux",
+            "optionA": [
+                {"areaOfLaw": "V", "confidence": 0.9},
+                {"areaOfLaw": "T", "confidence": 0.2},
+            ],
+            "optionB": [
+                {"areaOfLaw": "U", "confidence": 0.9},
+                {"areaOfLaw": "V", "confidence": 0.8},
+            ],
+        },
+    ]
+    with (tmp_path / "hlv-annotation" / "input.jsonl").open(encoding="utf8") as f:
+        assert [json.loads(l) for l in f] == expected
+    assert (
+        (tmp_path / "hlv-annotation" / "metadata.csv").read_text(encoding="utf8")
+        == textwrap.dedent(
+            f"""
+    id,optionA,optionB
+    {start_id},a,b
+    {start_id+1},a,b
+    {start_id+2},a,c
+    {start_id+3},a,c
+    {start_id+4},b,c
+    {start_id+5},b,c
+    """
+        ).lstrip()
+    )
+
+
+@pytest.fixture
+def hlv_annotation_artifacts(tmp_path):
     true_hlv = np.random.rand(5, 3)
     with (tmp_path / "method2hlv.npy").open("wb") as f:
         pickle.dump(
@@ -141,20 +276,33 @@ def test_shuffle(tmp_path):
         for i in range(true_hlv.shape[0]):
             print(json.dumps({"text": " ".join(["foo"] * (i + 1))}), file=f)
 
-    main(
+    return (
         tmp_path / "method2hlv.npy",
-        tmp_path / "inputs.jsonl",
         tmp_path / "label.dict",
+        tmp_path / "inputs.jsonl",
+    )
+
+
+@pytest.mark.parametrize("vs", ["true", "method"])
+def test_shuffle(tmp_path, hlv_annotation_artifacts, vs):
+    method2hlv_path, label_dict_path, inputs_path = hlv_annotation_artifacts
+
+    main(
+        method2hlv_path,
+        inputs_path,
+        label_dict_path,
         tmp_path / "no-shuf",
         thresh=0.1,
+        vs=vs,
     )
     main(
-        tmp_path / "method2hlv.npy",
-        tmp_path / "inputs.jsonl",
-        tmp_path / "label.dict",
+        method2hlv_path,
+        inputs_path,
+        label_dict_path,
         tmp_path / "shuf",
         thresh=0.1,
         shuffle=True,
+        vs=vs,
     )
 
     with (tmp_path / "no-shuf" / "input.jsonl").open(encoding="utf8") as f:
@@ -165,29 +313,14 @@ def test_shuffle(tmp_path):
     assert no_shuf_data == sorted(shuf_data, key=lambda x: x["id"])
 
 
-def test_subsample(tmp_path):
-    true_hlv = np.random.rand(5, 3)
-    with (tmp_path / "method2hlv.npy").open("wb") as f:
-        pickle.dump(
-            {
-                meth: np.stack([true_hlv, np.random.rand(*true_hlv.shape)], axis=0)
-                for meth in "ABCDEFG"
-            },
-            f,
-        )
-    label_dict = Dictionary(add_unk=False)
-    for l in "UVT":
-        label_dict.add_item(l)
-    label_dict.save(tmp_path / "label.dict")
-    texts = [" ".join(["foo"] * (i + 1)) for i in range(true_hlv.shape[0])]
-    with (tmp_path / "inputs.jsonl").open("w", encoding="utf8") as f:
-        for text in texts:
-            print(json.dumps({"text": text}), file=f)
+def test_subsample_vs_true(tmp_path, hlv_annotation_artifacts):
+    method2hlv_path, label_dict_path, inputs_path = hlv_annotation_artifacts
+    texts = [json.loads(l)["text"] for l in inputs_path.read_text("utf8").splitlines()]
 
     main(
-        tmp_path / "method2hlv.npy",
-        tmp_path / "inputs.jsonl",
-        tmp_path / "label.dict",
+        method2hlv_path,
+        inputs_path,
+        label_dict_path,
         tmp_path / "hlv-annotation",
         thresh=0.1,
         size=3,
@@ -199,35 +332,40 @@ def test_subsample(tmp_path):
     assert all(d["text"] in texts for d in data)
 
 
-def test_randomise_options(tmp_path):
-    true_hlv = np.random.rand(5, 3)
-    with (tmp_path / "method2hlv.npy").open("wb") as f:
-        pickle.dump(
-            {
-                meth: np.stack([true_hlv, np.random.rand(*true_hlv.shape)], axis=0)
-                for meth in "ABCDEFG"
-            },
-            f,
-        )
-    label_dict = Dictionary(add_unk=False)
-    for l in "UVT":
-        label_dict.add_item(l)
-    label_dict.save(tmp_path / "label.dict")
-    with (tmp_path / "inputs.jsonl").open("w", encoding="utf8") as f:
-        for i in range(true_hlv.shape[0]):
-            print(json.dumps({"text": " ".join(["foo"] * (i + 1))}), file=f)
+def test_subsample_vs_method(tmp_path, hlv_annotation_artifacts):
+    method2hlv_path, label_dict_path, inputs_path = hlv_annotation_artifacts
+    texts = [json.loads(l)["text"] for l in inputs_path.read_text("utf8").splitlines()]
 
     main(
-        tmp_path / "method2hlv.npy",
-        tmp_path / "inputs.jsonl",
-        tmp_path / "label.dict",
+        method2hlv_path,
+        inputs_path,
+        label_dict_path,
+        tmp_path / "hlv-annotation",
+        thresh=0.1,
+        size=3,
+        vs="method",
+    )
+
+    with (tmp_path / "hlv-annotation" / "input.jsonl").open(encoding="utf8") as f:
+        data = [json.loads(l) for l in f]
+    assert len(data) == 7 * 6 // 2 * 3
+    assert all(d["text"] in texts for d in data)
+
+
+def test_randomise_options_vs_true(tmp_path, hlv_annotation_artifacts):
+    method2hlv_path, label_dict_path, inputs_path = hlv_annotation_artifacts
+
+    main(
+        method2hlv_path,
+        inputs_path,
+        label_dict_path,
         tmp_path / "no-rand",
         thresh=0.1,
     )
     main(
-        tmp_path / "method2hlv.npy",
-        tmp_path / "inputs.jsonl",
-        tmp_path / "label.dict",
+        method2hlv_path,
+        inputs_path,
+        label_dict_path,
         tmp_path / "rand",
         thresh=0.1,
         randomise_options=True,
@@ -240,6 +378,47 @@ def test_randomise_options(tmp_path):
     with (tmp_path / "rand" / "metadata.csv").open(encoding="utf8") as f:
         id2swapped = {
             int(row["id"]): row["trueHLV"] == "B" for row in csv.DictReader(f)
+        }
+    assert not all(id2swapped.values()) and any(id2swapped.values())
+    assert no_rand_data == [
+        {
+            "id": dat["id"],
+            "text": dat["text"],
+            "optionA": dat["optionB"] if id2swapped[dat["id"]] else dat["optionA"],
+            "optionB": dat["optionA"] if id2swapped[dat["id"]] else dat["optionB"],
+        }
+        for dat in rand_data
+    ]
+
+
+def test_randomise_options_vs_method(tmp_path, hlv_annotation_artifacts):
+    method2hlv_path, label_dict_path, inputs_path = hlv_annotation_artifacts
+
+    main(
+        method2hlv_path,
+        inputs_path,
+        label_dict_path,
+        tmp_path / "no-rand",
+        thresh=0.1,
+        vs="method",
+    )
+    main(
+        method2hlv_path,
+        inputs_path,
+        label_dict_path,
+        tmp_path / "rand",
+        thresh=0.1,
+        randomise_options=True,
+        vs="method",
+    )
+    with (tmp_path / "no-rand" / "input.jsonl").open(encoding="utf8") as f:
+        no_rand_data = [json.loads(l) for l in f]
+    with (tmp_path / "rand" / "input.jsonl").open(encoding="utf8") as f:
+        rand_data = [json.loads(l) for l in f]
+    assert no_rand_data != rand_data
+    with (tmp_path / "rand" / "metadata.csv").open(encoding="utf8") as f:
+        id2swapped = {
+            int(row["id"]): row["optionA"] > row["optionB"] for row in csv.DictReader(f)
         }
     assert not all(id2swapped.values()) and any(id2swapped.values())
     assert no_rand_data == [

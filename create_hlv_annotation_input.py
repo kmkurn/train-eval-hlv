@@ -19,6 +19,7 @@ import csv
 import json
 import pickle
 import random
+from itertools import combinations
 from pathlib import Path
 from typing import Optional
 
@@ -36,6 +37,7 @@ def main(
     randomise_options: bool = False,
     start_id: int = 0,
     shuffle_within_method: bool = False,
+    vs: str = "true",
 ) -> None:
     with method2hlv_file.open("rb") as f:
         method2hlv = pickle.load(f)
@@ -51,67 +53,120 @@ def main(
     indices = list(reversed(range(len(inputs))))
     if shuffle_within_method:
         random.shuffle(indices)
-    for meth, (true_hlv, pred_hlv) in method2hlv.items():
-        selected_indices: list[int] = []
-        while len(selected_indices) < size:
-            try:
-                idx = indices.pop()
-            except IndexError:
-                indices = list(reversed(range(len(inputs))))
-                if shuffle_within_method:
-                    random.shuffle(indices)
-            else:
-                selected_indices.append(idx)
-        for i in selected_indices:
-            swapped = random.choice([False, True]) if randomise_options else False
-            hlvA, hlvB = (pred_hlv, true_hlv) if swapped else (true_hlv, pred_hlv)
-            data.append(
-                {
-                    "id": start_id + count,
-                    "text": inputs[i]["text"],
-                    "optionA": sorted(
-                        [
-                            {"areaOfLaw": l, "confidence": c}
-                            for l in label_dict.get_items()
-                            if (c := hlvA[i, label_dict.get_idx_for_item(l)]) > thresh
-                        ],
-                        key=lambda x: x["confidence"],
-                        reverse=True,
-                    ),
-                    "optionB": sorted(
-                        [
-                            {"areaOfLaw": l, "confidence": c}
-                            for l in label_dict.get_items()
-                            if (c := hlvB[i, label_dict.get_idx_for_item(l)]) > thresh
-                        ],
-                        key=lambda x: x["confidence"],
-                        reverse=True,
-                    ),
-                }
-            )
-            metadata.append(
-                {
-                    "id": start_id + count,
-                    "method": meth,
-                    "trueHLV": "B" if swapped else "A",
-                }
-            )
-            count += 1
+    if vs == "true":
+        for meth, (true_hlv, pred_hlv) in method2hlv.items():
+            selected_indices: list[int] = []
+            while len(selected_indices) < size:
+                try:
+                    idx = indices.pop()
+                except IndexError:
+                    indices = list(reversed(range(len(inputs))))
+                    if shuffle_within_method:
+                        random.shuffle(indices)
+                else:
+                    selected_indices.append(idx)
+            for i in selected_indices:
+                swapped = random.choice([False, True]) if randomise_options else False
+                hlvA, hlvB = (pred_hlv, true_hlv) if swapped else (true_hlv, pred_hlv)
+                data.append(
+                    {
+                        "id": start_id + count,
+                        "text": inputs[i]["text"],
+                        "optionA": sorted(
+                            [
+                                {"areaOfLaw": l, "confidence": c}
+                                for l in label_dict.get_items()
+                                if (c := hlvA[i, label_dict.get_idx_for_item(l)])
+                                > thresh
+                            ],
+                            key=lambda x: x["confidence"],
+                            reverse=True,
+                        ),
+                        "optionB": sorted(
+                            [
+                                {"areaOfLaw": l, "confidence": c}
+                                for l in label_dict.get_items()
+                                if (c := hlvB[i, label_dict.get_idx_for_item(l)])
+                                > thresh
+                            ],
+                            key=lambda x: x["confidence"],
+                            reverse=True,
+                        ),
+                    }
+                )
+                metadata.append(
+                    {
+                        "id": start_id + count,
+                        "method": meth,
+                        "trueHLV": "B" if swapped else "A",
+                    }
+                )
+                count += 1
+    else:
+        assert vs == "method"
+        for methA, methB in combinations(method2hlv.keys(), 2):
+            selected_indices = []
+            while len(selected_indices) < size:
+                try:
+                    idx = indices.pop()
+                except IndexError:
+                    indices = list(reversed(range(len(inputs))))
+                    if shuffle_within_method:
+                        random.shuffle(indices)
+                else:
+                    selected_indices.append(idx)
+            for i in selected_indices:
+                swapped = random.choice([False, True]) if randomise_options else False
+                methA, methB = (methB, methA) if swapped else (methA, methB)
+                hlvA, hlvB = method2hlv[methA][1], method2hlv[methB][1]
+                data.append(
+                    {
+                        "id": start_id + count,
+                        "text": inputs[i]["text"],
+                        "optionA": sorted(
+                            [
+                                {"areaOfLaw": l, "confidence": c}
+                                for l in label_dict.get_items()
+                                if (c := hlvA[i, label_dict.get_idx_for_item(l)])
+                                > thresh
+                            ],
+                            key=lambda x: x["confidence"],
+                            reverse=True,
+                        ),
+                        "optionB": sorted(
+                            [
+                                {"areaOfLaw": l, "confidence": c}
+                                for l in label_dict.get_items()
+                                if (c := hlvB[i, label_dict.get_idx_for_item(l)])
+                                > thresh
+                            ],
+                            key=lambda x: x["confidence"],
+                            reverse=True,
+                        ),
+                    }
+                )
+                metadata.append(
+                    {"id": start_id + count, "optionA": methA, "optionB": methB}
+                )
+                count += 1
     if shuffle:
         random.shuffle(data)
     with (output_dir / "input.jsonl").open("w", encoding="utf8") as f:
         for dat in data:
             print(json.dumps(dat), file=f)
     with (output_dir / "metadata.csv").open("w", encoding="utf8") as f:
-        writer = csv.DictWriter(f, "id method trueHLV".split())
+        writer = csv.DictWriter(
+            f, ("id method trueHLV" if vs == "true" else "id optionA optionB").split()
+        )
         writer.writeheader()
         writer.writerows(metadata)
     with (output_dir / "config.txt").open("w", encoding="utf8") as f:
-        print(f"Threshold: {thresh}", file=f)
-        print(f"Size: {size}", file=f)
-        print(f"Shuffle: {shuffle}", file=f)
-        print(f"Randomise options: {randomise_options}", file=f)
-        print(f"Shuffle within method: {shuffle_within_method}", file=f)
+        print(f"{thresh=}", file=f)
+        print(f"{size=}", file=f)
+        print(f"{shuffle=}", file=f)
+        print(f"{randomise_options=}", file=f)
+        print(f"{shuffle_within_method=}", file=f)
+        print(f"{vs=}", file=f)
 
 
 if __name__ == "__main__":
@@ -150,6 +205,12 @@ if __name__ == "__main__":
         action="store_true",
         help="shuffle examples within a method",
     )
+    parser.add_argument(
+        "--vs",
+        default="true",
+        choices=["true", "method"],
+        help="comparing against what?",
+    )
     args = parser.parse_args()
     main(
         args.method2hlv,
@@ -162,4 +223,5 @@ if __name__ == "__main__":
         args.randomise_options,
         args.start_id,
         args.shuffle_within_method,
+        args.vs,
     )

@@ -66,28 +66,20 @@ All Python scripts in this section can be invoked with `-h` or `--help` option t
 ### Preprocessing
 
   1. Compute the mean HLV across runs for all models using `compute_method2hlv.py`
-  1. Create the annotation input data using `create_hlv_annotation_input.py`
+  1. Create the annotation input data using `create_hlv_annotation_input.py --vs method`
 
 Annotators are expected to annotate the annotation input data. The expected format of the annotation output data is JSON whose schema can be viewed under directory `schemas`. The following instructions assume that the annotation output data exists.
 
 ### Postprocessing
 
-  1. (Optional) Compute inter-annotator agreement using `compute_hlv_annotation_agreement.py`
-  1. Compute vote distributions using `compute_vote_dist.py`
+Compute the number of pairwise wins using `compute_pairwise_wins2.py`. In the output directory, there will be 2 files:
 
-The result of the last instruction is a [DataFrame](https://pandas.pydata.org/docs/reference/frame.html#dataframe) serialised using [pickle](https://docs.python.org/3.10/library/pickle.html) with 5 columns:
+  1. `counts.npz`, which contains two [NumPy](https://numpy.org/doc/stable/index.html) arrays---each of shape 2xMxM where the first dimension represents the pretrained model (0=RoBERTa, 1=LLaMA), and M is the number of HLV training methods---under the following keys:
+      1. `comps`, a symmetric matrix with all-zeros diagonal which stores the number of comparisons between each pair of methods; and
+      1. `wins`, which stores the number of comparisons where the column method wins over the row method.
+  1. `method.dict`, a serialised [FlairNLP's Dictionary](https://flairnlp.github.io/flair/v0.13.0/api/flair.data.html#flair.data.Dictionary) containing the method names and indices corresponding to the rows and columns of matrices in `counts.npz`.
 
-  1. `model`, name of the pretrained model (e.g., `llama`);
-  1. `method`, name of the HLV training method (e.g., `ReL`);
-  1. `vote_dist`, a tuple of 4 numbers where each denotes the fraction of annotators who prefer:
-      1. the predicted to the true HLV,
-      1. both the predicted and the true HLV,
-      1. the true to the predicted HLV, and
-      1. neither the predicted nor the true HLV;
-  1. `total`, number of annotators; and
-  1. `nunique_texts`, number of unique input texts.
-
-To get the fraction of annotators who prefer the predicted HLV, add the first and the second numbers of `vote_dist`.
+To get the scores of all methods, the [rank centrality algorithm](https://proceedings.neurips.cc/paper/2012/hash/9adeb82fffb5444e81fa0ce8ad8afe7a-Abstract.html) is then used.
 
 ## MongoDB integration with Sacred
 
