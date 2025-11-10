@@ -92,13 +92,14 @@ Apache License, Version 2.0
 ## Citation
 
 ```
-@misc{kurniawan2025,
+@article{kurniawan2025,
   title = {Training and {{Evaluating}} with {{Human Label Variation}}: {{An Empirical Study}}},
-  shorttitle = {Training and {{Evaluating}} with {{Human Label Variation}}},
   author = {Kurniawan, Kemal and Mistica, Meladel and Baldwin, Timothy and Lau, Jey Han},
-  year = {2025},
-  eprint = {2502.01891},
-  doi = {10.48550/arXiv.2502.01891},
+  year = 2025,
+  journal = {Computational Linguistics},
+  pages = {1--27},
+  issn = {1530-9312},
+  doi = {10.1162/COLI.a.578},
 }
 ```
 
