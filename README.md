@@ -1,5 +1,5 @@
 # train-eval-hlv
-Code for the paper "Training and Evaluating with Human Label Variation: An Empirical Study"
+Code and data for the paper "Training and Evaluating with Human Label Variation: An Empirical Study"
 
 ## Requirements
 
@@ -17,7 +17,7 @@ Ensure that everything works by running the tests with `pytest`. By default, slo
 
 Also, tests in module `test_flair` are skipped by default. You may want to run them to verify the [FlairNLP](https://flairnlp.github.io/) version by passing `-k test_flair` argument: `pytest -k test_flair`. Combine with `-m slow` to run the slow tests too.
 
-## Data
+## Data splits
 
 All Python scripts in this section can be invoked with `-h` or `--help` option to show their usage.
 
@@ -80,6 +80,10 @@ Compute the number of pairwise wins using `compute_pairwise_wins2.py`. In the ou
   1. `method.dict`, a serialised [FlairNLP's Dictionary](https://flairnlp.github.io/flair/v0.13.0/api/flair.data.html#flair.data.Dictionary) containing the method names and indices corresponding to the rows and columns of matrices in `counts.npz`.
 
 To get the scores of all methods, the [rank centrality algorithm](https://proceedings.neurips.cc/paper/2012/hash/9adeb82fffb5444e81fa0ce8ad8afe7a-Abstract.html) is then used.
+
+## Model weights and predictions
+
+Due to the large number of dataset&ndash;model&ndash;method combinations, please email [me](mailto:kurniawan.k@unimelb.edu.au) to request access to specific model weights or predictions.
 
 ## MongoDB integration with Sacred
 
